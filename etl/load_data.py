@@ -1,6 +1,5 @@
 """
-load_data.py – RoseAmor ETL Pipeline
-=====================================
+
 Reads raw CSVs, applies data cleaning, and loads three layers into PostgreSQL:
     raw       → data/*.csv  (untouched source)
     staging   → stg_orders, stg_customers, stg_products  (typed + flagged)
@@ -38,9 +37,7 @@ def get_conn() -> psycopg2.extensions.connection:
         )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
 
 def safe_float(value: str):
     """Return float or None for blank/invalid strings."""
@@ -70,18 +67,13 @@ def normalize_date(value: str) -> str | None:
     return date_part
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # STAGING
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_staging(cur):
     print("→ Loading staging layer …")
 
     for stmt in [
-        "DROP TABLE IF EXISTS stg_orders   CASCADE",
-        "DROP TABLE IF EXISTS stg_customers CASCADE",
-        "DROP TABLE IF EXISTS stg_products  CASCADE",
-        """CREATE TABLE stg_orders (
+        """CREATE TABLE IF NOT EXISTS stg_orders (
             order_id        TEXT,
             customer_id     TEXT,
             sku             TEXT,
@@ -94,19 +86,26 @@ def load_staging(cur):
             _null_price     SMALLINT DEFAULT 0,
             _invalid_date   SMALLINT DEFAULT 0
         )""",
-        """CREATE TABLE stg_customers (
+        """CREATE TABLE IF NOT EXISTS stg_customers (
             customer_id TEXT,
             name        TEXT,
             country     TEXT,
             segment     TEXT,
             created_at  DATE
         )""",
-        """CREATE TABLE stg_products (
+        """CREATE TABLE IF NOT EXISTS stg_products (
             sku      TEXT,
             category TEXT,
             cost     DOUBLE PRECISION,
             active   SMALLINT
         )""",
+    ]:
+        cur.execute(stmt)
+
+    for stmt in [
+        "TRUNCATE TABLE stg_orders",
+        "TRUNCATE TABLE stg_customers",
+        "TRUNCATE TABLE stg_products",
     ]:
         cur.execute(stmt)
 
@@ -175,22 +174,72 @@ def load_staging(cur):
     print(f"   stg_products : {len(product_rows):>6} rows loaded")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # CONSUMPTION  (star schema)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_consumption(cur):
     print("→ Building consumption layer …")
 
     for stmt in [
-        "DROP TABLE IF EXISTS dim_customers CASCADE",
-        "CREATE TABLE dim_customers AS SELECT customer_id, name, country, segment, created_at FROM stg_customers",
-        "ALTER TABLE dim_customers ADD PRIMARY KEY (customer_id)",
-        "DROP TABLE IF EXISTS dim_products CASCADE",
-        "CREATE TABLE dim_products AS SELECT sku, category, cost, active FROM stg_products",
-        "ALTER TABLE dim_products ADD PRIMARY KEY (sku)",
-        "DROP TABLE IF EXISTS fact_orders CASCADE",
-        """CREATE TABLE fact_orders AS
+        """CREATE TABLE IF NOT EXISTS dim_customers (
+            customer_id TEXT PRIMARY KEY,
+            name        TEXT,
+            country     TEXT,
+            segment     TEXT,
+            created_at  DATE
+        )""",
+        """CREATE TABLE IF NOT EXISTS dim_products (
+            sku      TEXT PRIMARY KEY,
+            category TEXT,
+            cost     DOUBLE PRECISION,
+            active   SMALLINT
+        )""",
+        """CREATE TABLE IF NOT EXISTS fact_orders (
+            order_id      TEXT PRIMARY KEY,
+            customer_id   TEXT,
+            sku           TEXT,
+            quantity      INTEGER,
+            unit_price    DOUBLE PRECISION,
+            order_date    DATE,
+            year          TEXT,
+            month         TEXT,
+            year_month    TEXT,
+            channel       TEXT,
+            revenue       NUMERIC(18,2),
+            gross_profit  NUMERIC(18,2),
+            margin_pct    NUMERIC(10,2)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_fact_orders_customer ON fact_orders (customer_id)",
+        "CREATE INDEX IF NOT EXISTS idx_fact_orders_sku      ON fact_orders (sku)",
+        "CREATE INDEX IF NOT EXISTS idx_fact_orders_date     ON fact_orders (order_date)",
+        "CREATE INDEX IF NOT EXISTS idx_fact_orders_channel  ON fact_orders (channel)",
+    ]:
+        cur.execute(stmt)
+
+    for stmt in [
+        "TRUNCATE TABLE fact_orders",
+        "TRUNCATE TABLE dim_customers",
+        "TRUNCATE TABLE dim_products",
+        """INSERT INTO dim_customers (customer_id, name, country, segment, created_at)
+        SELECT customer_id, name, country, segment, created_at
+        FROM stg_customers""",
+        """INSERT INTO dim_products (sku, category, cost, active)
+        SELECT sku, category, cost, active
+        FROM stg_products""",
+        """INSERT INTO fact_orders (
+            order_id,
+            customer_id,
+            sku,
+            quantity,
+            unit_price,
+            order_date,
+            year,
+            month,
+            year_month,
+            channel,
+            revenue,
+            gross_profit,
+            margin_pct
+        )
         SELECT
             o.order_id,
             o.customer_id,
@@ -214,13 +263,7 @@ def load_consumption(cur):
           AND o._negative_qty = 0
                     AND o._null_price   = 0
                     AND o._invalid_date = 0""",
-        "ALTER TABLE fact_orders ADD PRIMARY KEY (order_id)",
-        "CREATE INDEX idx_fact_orders_customer ON fact_orders (customer_id)",
-        "CREATE INDEX idx_fact_orders_sku      ON fact_orders (sku)",
-        "CREATE INDEX idx_fact_orders_date     ON fact_orders (order_date)",
-        "CREATE INDEX idx_fact_orders_channel  ON fact_orders (channel)",
-        "DROP VIEW IF EXISTS v_orders_full",
-        """CREATE VIEW v_orders_full AS
+                """CREATE OR REPLACE VIEW v_orders_full AS
         SELECT
             f.order_id,
             f.order_date,
@@ -258,9 +301,7 @@ def load_consumption(cur):
     print(f"   fact_orders  : {n_fact:>6} rows (clean)")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # QA SUMMARY
-# ─────────────────────────────────────────────────────────────────────────────
 
 def print_qa(cur):
     print("\n── QA Summary ──────────────────────────────────────────────────")
@@ -292,9 +333,7 @@ def print_qa(cur):
     print("────────────────────────────────────────────────────────────────")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # MAIN
-# ─────────────────────────────────────────────────────────────────────────────
 
 def run():
     conn = get_conn()

@@ -1,9 +1,5 @@
 """
-app.py – RoseAmor Order Registration Web App
-=============================================
-A minimal Flask application that allows users to register new orders
-with basic validation and stores them in a PostgreSQL database.
-
+Roseamor - New Orders App
 Connection config (env vars with defaults):
   PG_HOST     = localhost
   PG_PORT     = 5432
@@ -31,9 +27,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "roseamor-dev-secret-change-in-pro
 VALID_CHANNELS = {"ecommerce", "retail", "wholesale", "export"}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # DATABASE
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _pg_conn() -> psycopg2.extensions.connection:
     return psycopg2.connect(
@@ -72,9 +66,7 @@ def init_db():
     conn.close()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # VALIDATION
-# ─────────────────────────────────────────────────────────────────────────────
 
 def validate_order(data: dict) -> dict:
     """
@@ -103,14 +95,14 @@ def validate_order(data: dict) -> dict:
         try:
             qty = int(qty_str)
             if qty <= 0:
-                errors["quantity"] = "La cantidad debe ser mayor a 0."
+                errors["quantity"] = "La cantidad debe ser mayor a 0"
         except ValueError:
-            errors["quantity"] = "La cantidad debe ser un número entero."
+            errors["quantity"] = "La cantidad debe ser un número entero"
 
     # Unit price: required, numeric, > 0
     price_str = data.get("unit_price", "").strip()
     if not price_str:
-        errors["unit_price"] = "El precio unitario es obligatorio."
+        errors["unit_price"] = "El precio unitario es obligatorio"
     else:
         try:
             price = float(price_str)
@@ -135,9 +127,7 @@ def validate_order(data: dict) -> dict:
     return errors
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # ROUTES
-# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
 def index():
@@ -203,9 +193,7 @@ def list_orders():
     return render_template("list.html", orders=rows)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     init_db()

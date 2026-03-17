@@ -1,232 +1,173 @@
-﻿# RoseAmor - Technical Test Documentation
+﻿# RoseAmor: Prueba Técnica - Leonardo Reascos
 
-This repository is migrated to PostgreSQL.
-
-Default database configuration used by ETL and app:
-- Database: `test`
-- User: `dev`
-- Password: `test`
-- Host: `localhost`
-- Port: `5432`
-
-These values can be overridden with environment variables:
-- `PG_HOST`, `PG_PORT`, `PG_DBNAME`, `PG_USER`, `PG_PASSWORD`
+Este repositorio contiene la solución técnica para la posición de **Ingeniero de Datos Full Stack**. El proyecto implementa un ciclo de vida de datos completo: desde la ingesta de datos crudos (ETL) y el modelado relacional en PostgreSQL, hasta la visualización de inteligencia de negocios (BI) y una interfaz web transaccional.
 
 ---
 
-## 1. Project Structure
+## 1. Infraestructura del Proyecto
 
-```text
+### Configuración de la Base de Datos
+
+La solución utiliza **PostgreSQL** como sistema de gestión de bases de datos relacionales (RDBMS) central.
+
+| Parámetro | Valor |
+|-----------|-------|
+| Base de Datos | `test` |
+| Usuario | `dev` |
+| Contraseña | `test` |
+| Host/Puerto | `localhost:5432` |
+
+
+### Estructura de Directorios
+```
 rosemoretecnicaltest/
-  data/
-    customers.csv
-    orders.csv
-    products.csv
-  etl/
-    load_data.py
-  sql/
-    01_staging.sql
-    02_consumption.sql
-    kpis.sql
-  app/
-    app.py
-    requirements.txt
-    templates/
-      index.html
-      list.html
-  README.md
+├── data/                   # Archivos CSV origen (Capa Raw)
+├── etl/                    # Scripts de Python para orquestación de datos
+│   └── load_data.py        # Script principal de ejecución ETL
+├── sql/                    # Scripts SQL DDL y DML
+│   ├── 01_staging.sql      # Definiciones del área de staging
+│   ├── 02_consumption.sql  # Modelo dimensional y vistas
+│   └── kpis.sql            # Consultas analíticas para métricas de negocio
+├── app/                    # Aplicación Web Flask
+│   ├── app.py              # Lógica de backend y enrutamiento
+│   ├── requirements.txt
+│   └── templates/          # Componentes de Frontend HTML/CSS
+│       ├── index.html
+│       └── list.html
+└── README.md
 ```
 
 ---
 
-## 2. Architecture and Data Flow
+## 2. Arquitectura y Flujo de Datos
 
-`raw CSV -> staging tables -> dimensional model -> BI dashboard`
+El proyecto sigue una **Arquitectura de Medallón**:
+```
+CSV Crudos (Bronce) → Tablas de Staging (Plata) → Modelo Dimensional (Oro) → Dashboard BI
+```
 
-1. Raw files are read from `data/`.
-2. `etl/load_data.py` creates and loads:
-   - `stg_orders`
-   - `stg_customers`
-   - `stg_products`
-3. Consumption model is generated:
-   - `dim_customers`
-   - `dim_products`
-   - `fact_orders`
-   - `v_orders_full`
-4. Power BI/Looker consumes `v_orders_full` (or the star model).
+- **Ingesta:** Python (módulo `csv` + `psycopg2`) lee los datos crudos del directorio `/data`.
+- **Procesamiento:** Los datos se normalizan y cargan en tablas de staging (`stg_orders`, `stg_customers`, `stg_products`).
+- **Modelado:** Se genera un esquema en estrella compuesto por dimensiones (`dim_customers`, `dim_products`) y una tabla de hechos centralizada (`fact_orders`).
+- **Consumo:** Se proporciona una capa semántica a través de la vista `v_orders_full` para una integración fluida con herramientas de BI.
 
 ---
 
-## 3. Data Cleaning Rules
+## 3. Integridad de Datos y Reglas de Negocio
 
-### orders.csv
-- Duplicate `order_id`: keep first occurrence, flag `_is_duplicate=1` for later rows.
-- Negative `quantity`: flag `_negative_qty=1` and exclude from `fact_orders`.
-- Empty `unit_price`: flag `_null_price=1` and exclude from `fact_orders`.
-- `order_date`: normalized to `DATE`.
-- `channel`: normalized to lowercase.
+### Lógica de Limpieza
 
-### customers.csv
-- Empty `country` -> `'Unknown'`
-- Empty `segment` -> `'Unknown'`
-- `created_at` normalized to `DATE`.
+**Pedidos (Orders)**
+- **Deduplicación:** Lógica basada en `order_id` (enfoque de primer registro).
+- **Validación de Restricciones:** Exclusión de cantidades negativas y precios unitarios nulos.
+- **Normalización:** Formatos de fecha estándar ISO, descarte de fechas inválidas y normalización de nombres de canales a minúsculas.
 
-### products.csv
-- Empty `category` -> `'Unknown'`
-- `active`: mapped to `1/0`.
+**Clientes (Customers)**
+- **Manejo de Nulos:** Los valores faltantes en `country` o `segment` se imputan como `'Unknown'`.
+- **Casting de Tipos:** El campo `created_at` se convierte al tipo `DATE` para análisis temporal.
+
+**Productos (Products)**
+- **Mapeo Booleano:** El estado `active` se convierte a un formato de entero binario (`0`/`1`).
 
 ---
 
-## 4. Data Model
+## 4. Modelo Analítico (Esquema en Estrella)
 
-### Dimensions
-- `dim_customers(customer_id PK, name, country, segment, created_at)`
-- `dim_products(sku PK, category, cost, active)`
+### Definición de Métricas
 
-### Fact
-- `fact_orders(order_id PK, customer_id, sku, quantity, unit_price, order_date, year, month, year_month, channel, revenue, gross_profit, margin_pct)`
-
-### Metrics
-- `revenue = quantity * unit_price`
-- `gross_profit = quantity * (unit_price - cost)`
-- `margin_pct = (unit_price - cost) / unit_price * 100`
+| Métrica | Fórmula |
+|---------|---------|
+| **Ingresos (Revenue)** | `quantity * unit_price` |
+| **Utilidad Bruta (Gross Profit)** | `quantity * (unit_price - cost)` |
+| **% de Margen** | `((unit_price - cost) / unit_price) * 100` |
 
 ---
 
-## 5. How to Run
+## 5. Guía de Despliegue
 
-### 5.1 Prerequisites
+### 5.1 Requisitos Previos
+
 - Python 3.11+
-- PostgreSQL installed and running
-- Database/user available:
-  - DB: `test`
-  - User: `dev`
-  - Password: `test`
+- Instancia de PostgreSQL activa
 
-If database does not exist:
-
-```sql
-CREATE DATABASE test;
-```
-
-If user does not exist:
-
-```sql
-CREATE USER dev WITH PASSWORD 'test';
-GRANT ALL PRIVILEGES ON DATABASE test TO dev;
-```
-
-### 5.2 Install dependencies
-
+### 5.2 Configuración del Entorno
 ```bash
-cd app
-pip install -r requirements.txt
-cd ..
+# Instalar dependencias (desde la raíz del repo)
+pip install -r app/requirements.txt
+
+# Inicialización de la base de datos (PostgreSQL)
+# CREATE DATABASE test;
+# CREATE USER dev WITH PASSWORD 'test';
 ```
 
-### 5.3 Run ETL
+### 5.3 Pipeline de Ejecución
 
+**Paso 1 — Ejecutar ETL:** Procesa archivos CSV y puebla PostgreSQL.
 ```bash
 python etl/load_data.py
 ```
 
-Expected: tables in PostgreSQL are created/updated.
-
-### 5.4 Run KPI SQL
-
+**Paso 2 — Verificar KPIs:** Ejecuta scripts analíticos para validar la consistencia de los datos.
 ```bash
-psql -h localhost -p 5432 -U dev -d test -f sql/kpis.sql
+psql -h localhost -U dev -d test -f sql/kpis.sql
 ```
 
-### 5.5 Run web app
+Nota: los archivos `sql/01_staging.sql` y `sql/02_consumption.sql` se incluyen como referencia del modelo y transformaciones. El script `etl/load_data.py` ya crea y carga staging/consumo de forma automática.
 
+**Paso 3 — Lanzar la interfaz web:**
 ```bash
 cd app
 python app.py
 ```
 
-Open: `http://127.0.0.1:5000`
-
-Orders are saved in PostgreSQL table: `public.new_orders`.
+Acceda a la aplicación en [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
 ---
 
-## 6. BI Dashboard Requirements Mapping
+## 6. Business Intelligence (Power BI)
 
-Current status:
-- Data model is ready in PostgreSQL (`fact_orders`, `dim_*`, `v_orders_full`).
-- The `.pbix` file still needs to be created in Power BI Desktop.
+La capa de reporte se conecta directamente a la vista de PostgreSQL `v_orders_full`.
 
-Build it in Power BI Desktop (all with Power BI):
-
-1. Open Power BI Desktop.
-2. Get Data -> PostgreSQL database.
-3. Server: `localhost:5432`
-4. Database: `test`
-5. User/password: `dev` / `test`
-6. In Navigator, load `v_orders_full` (recommended) or `fact_orders + dim_*`.
-7. Save the report as `RoseAmor_Dashboard.pbix` in the repo root.
-
-Recommended DAX measures (create in Power BI):
-
-```DAX
-Total Sales = SUM(v_orders_full[revenue])
-
-Total Margin = SUM(v_orders_full[gross_profit])
-
-Order Count = DISTINCTCOUNT(v_orders_full[order_id])
-
-Average Ticket = DIVIDE([Total Sales], [Order Count], 0)
-
-Margin % = DIVIDE([Total Margin], [Total Sales], 0)
+### Medidas DAX Principales
+```dax
+Total Sales   = SUM(v_orders_full[revenue])
+Average Ticket = DIVIDE([Total Sales], DISTINCTCOUNT(v_orders_full[order_id]))
+Margin %      = DIVIDE(SUM(v_orders_full[gross_profit]), [Total Sales])
 ```
 
-Required visuals:
-- KPI card: `Total Sales`
-- KPI card: `Total Margin`
-- KPI card: `Order Count`
-- KPI card: `Average Ticket`
-- Line chart: Axis `year_month`, Values `Total Sales`
-- Column chart: Axis `channel`, Values `Total Sales`
-- Bar chart: Axis `category`, Values `Total Margin` (or `Margin %`)
-- Bar chart (Top N 10): Axis `customer_name`, Values `Total Sales`
-- Bar chart (Top N 10): Axis `sku`, Values `SUM(quantity)` or `Total Sales`
+### Evidencia Visual
 
-Required slicers:
-- `order_date` (between)
-- `channel`
-- `category`
-- `country`
+> En un entorno de producción real se incluirían capturas de pantalla de alta resolución de las siguientes secciones:
 
-Publish/delivery:
-- Deliver `RoseAmor_Dashboard.pbix` in the repository.
-- If using Power BI Service, add report link in this README.
+- **Dashboard Ejecutivo:** Resumen de ingresos, márgenes y tendencias de pedidos.
+- **Análisis de Mercado:** Distribución de ventas por Canal y Categoría.
+- **Insights de Clientes:** Top 10 de generadores de ingresos y rendimiento de productos.
 
 ---
 
-## 7. Web App (Order Registration)
+## 7. Aplicación Web (Capa Transaccional)
 
-Form fields:
-- `order_id`, `customer_id`, `sku`, `quantity`, `unit_price`, `order_date`, `channel`
+Desarrollada con **Python Flask**, la aplicación sirve como puerta de entrada para el registro de pedidos en tiempo real.
 
-Validations:
-- Required fields
-- Non-negative and valid numeric values
-- Date format `YYYY-MM-DD`
-- Channel in `{ecommerce, retail, wholesale, export}`
-- Unique `order_id` (database constraint)
+**Stack Tecnológico:** Python · Flask · Jinja2 · PostgreSQL (`psycopg2`)
+
+**Lógica de Validación:**
+- Cumplimiento de campos obligatorios.
+- Restricciones numéricas positivas para cantidad y precio.
+- Validación estricta de Enums para canales de venta (`ecommerce`, `retail`, `wholesale`, `export`).
+- Integridad relacional mantenida mediante restricciones de unicidad en `order_id`.
 
 ---
 
-## 8. Refresh Process (New CSV)
+## 8. Estrategia de Actualización de Datos
 
-1. Replace files in `data/`.
-2. Re-run ETL:
+Para actualizar el sistema con nuevos datos:
 
+1. Sobrescriba los archivos origen en el directorio `/data`.
+2. Vuelva a ejecutar el script ETL:
 ```bash
-python etl/load_data.py
+   python etl/load_data.py
 ```
+3. Active la acción de **Actualizar (Refresh)** en el informe de Power BI Desktop.
 
-3. Refresh Power BI dataset.
-
-The ETL is idempotent for full reload because it drops/recreates staging and consumption tables each run.
+> El proceso ETL es **idempotente**: realiza una operación de `TRUNCATE/LOAD` en las tablas de staging y consumo para asegurar la consistencia de los datos sin duplicidad.

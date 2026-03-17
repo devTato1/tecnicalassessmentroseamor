@@ -1,18 +1,8 @@
-﻿-- =============================================================================
--- 01_staging.sql  --  RoseAmor  |  Raw to Staging Layer
--- =============================================================================
--- Purpose : Create staging tables from raw CSV data.
--- Engine  : PostgreSQL 14+
--- Run     : psql -U dev -d test -f sql/01_staging.sql
--- Note    : etl/load_data.py creates and populates these tables automatically.
--- =============================================================================
-
-
--- Staging: ORDERS
+﻿-- Staging: ORDERS
 -- Cleaning applied:
---   - Blank unit_price   -> _null_price=1   (10 rows)
---   - Negative quantity  -> _negative_qty=1 (8 rows)
---   - Duplicate order_id -> _is_duplicate=1 (15 rows, keep first seen)
+--   - Blank unit_price   -> _null_price=1
+--   - Negative quantity  -> _negative_qty=1
+--   - Duplicate order_id -> _is_duplicate=1 
 --   - order_date         -> cast to DATE
 --   - channel            -> lower case
 DROP TABLE IF EXISTS stg_orders CASCADE;

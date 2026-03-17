@@ -1,15 +1,4 @@
-﻿-- =============================================================================
--- kpis.sql  --  RoseAmor  |  Dashboard KPI Queries
--- =============================================================================
--- Target  : PostgreSQL 14+  (database: test)
--- Run     : psql -U dev -d test -f sql/kpis.sql
--- Prereq  : Run etl/load_data.py first to create the tables
--- =============================================================================
-
-
--- =============================================================================
--- SECTION 1 - KPI CARDS
--- =============================================================================
+﻿-- SECTION 1 - KPI CARDS
 
 -- 1.1  Total Revenue
 SELECT ROUND(SUM(revenue)::numeric, 2) AS total_revenue
@@ -32,9 +21,7 @@ SELECT ROUND((SUM(gross_profit) * 100.0 / NULLIF(SUM(revenue), 0))::numeric, 2) 
 FROM fact_orders;
 
 
--- =============================================================================
 -- SECTION 2 - SALES BY MONTH
--- =============================================================================
 
 SELECT
     year_month,
@@ -47,9 +34,7 @@ GROUP BY year_month
 ORDER BY year_month;
 
 
--- =============================================================================
 -- SECTION 3 - SALES BY CHANNEL
--- =============================================================================
 
 WITH channel_agg AS (
     SELECT
@@ -71,9 +56,7 @@ FROM channel_agg ca, grand g
 ORDER BY ca.revenue DESC;
 
 
--- =============================================================================
 -- SECTION 4 - MARGIN BY CATEGORY
--- =============================================================================
 
 SELECT
     p.category,
@@ -86,10 +69,7 @@ JOIN dim_products p ON f.sku = p.sku
 GROUP BY p.category
 ORDER BY margin_pct DESC;
 
-
--- =============================================================================
 -- SECTION 5 - TOP 10 CUSTOMERS BY REVENUE
--- =============================================================================
 
 SELECT
     c.customer_id,
@@ -105,10 +85,7 @@ GROUP BY c.customer_id, c.name, c.country, c.segment
 ORDER BY total_revenue DESC
 LIMIT 10;
 
-
--- =============================================================================
 -- SECTION 6 - TOP 10 PRODUCTS BY REVENUE
--- =============================================================================
 
 SELECT
     p.sku,
@@ -124,9 +101,7 @@ ORDER BY total_revenue DESC
 LIMIT 10;
 
 
--- =============================================================================
 -- SECTION 7 - SALES BY COUNTRY
--- =============================================================================
 
 SELECT
     c.country,
@@ -138,10 +113,7 @@ JOIN dim_customers c ON f.customer_id = c.customer_id
 GROUP BY c.country
 ORDER BY revenue DESC;
 
-
--- =============================================================================
 -- SECTION 8 - SALES BY SEGMENT
--- =============================================================================
 
 SELECT
     c.segment,
@@ -154,10 +126,7 @@ JOIN dim_customers c ON f.customer_id = c.customer_id
 GROUP BY c.segment
 ORDER BY revenue DESC;
 
-
--- =============================================================================
 -- SECTION 9 - MONTHLY GROWTH (Month-over-Month)
--- =============================================================================
 
 WITH monthly AS (
     SELECT year_month, SUM(revenue) AS revenue

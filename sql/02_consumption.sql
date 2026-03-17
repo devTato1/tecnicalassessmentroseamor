@@ -1,14 +1,4 @@
-﻿-- =============================================================================
--- 02_consumption.sql  --  RoseAmor  |  Staging to Consumption Layer
--- =============================================================================
--- Purpose : Build the star-schema dimensional model used by the BI dashboard.
--- Engine  : PostgreSQL 14+
--- Run     : psql -U dev -d test -f sql/02_consumption.sql
--- Prereq  : 01_staging.sql (or etl/load_data.py) must have run first
--- =============================================================================
-
-
--- Dimensions: CUSTOMERS
+﻿-- Dimensions: CUSTOMERS
 DROP TABLE IF EXISTS dim_customers CASCADE;
 CREATE TABLE dim_customers AS
 SELECT customer_id, name, country, segment, created_at FROM stg_customers;
@@ -22,13 +12,6 @@ SELECT sku, category, cost, active FROM stg_products;
 ALTER TABLE dim_products ADD PRIMARY KEY (sku);
 
 
--- Fact Table: ORDERS
--- Excluded rows:
---   _is_duplicate = 0  keep only the first occurrence
---   _negative_qty = 0  exclude returns / cancellations
---   _null_price   = 0  exclude rows where revenue cannot be calculated
---
--- Metrics: revenue, gross_profit, margin_pct (pre-computed at load time)
 DROP TABLE IF EXISTS fact_orders CASCADE;
 
 CREATE TABLE fact_orders AS
@@ -63,7 +46,7 @@ CREATE INDEX idx_fact_orders_date     ON fact_orders (order_date);
 CREATE INDEX idx_fact_orders_channel  ON fact_orders (channel);
 
 
--- Analytical view (denormalized - used by Power BI / Looker Studio)
+-- Analytical view
 DROP VIEW IF EXISTS v_orders_full;
 
 CREATE VIEW v_orders_full AS
