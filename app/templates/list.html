@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RoseAmor – Pedidos Registrados</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body       { background: #fdf6f9; font-family: 'Segoe UI', sans-serif; }
+    .brand-bar { background: #b5325a; padding: 1rem 0; }
+    .brand-bar h1 { color: #fff; font-size: 1.4rem; margin: 0; }
+    th { background: #b5325a; color: #fff; white-space: nowrap; }
+    .badge-ch  { font-size:.75rem; }
+    .nav-link  { color: #b5325a !important; font-size: .9rem; }
+  </style>
+</head>
+<body>
+<div class="brand-bar">
+  <div class="container d-flex justify-content-between align-items-center">
+    <h1>🌹 RoseAmor &nbsp;|&nbsp; Pedidos Registrados</h1>
+    <a href="/" class="nav-link">← Registrar nuevo pedido</a>
+  </div>
+</div>
+
+<div class="container py-5">
+  {% if orders %}
+  <p class="text-muted mb-3">{{ orders | length }} pedido(s) registrado(s).</p>
+  <div class="table-responsive">
+    <table class="table table-hover table-bordered table-sm align-middle">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Order ID</th>
+          <th>Customer ID</th>
+          <th>SKU</th>
+          <th>Cantidad</th>
+          <th>Precio U.</th>
+          <th>Total</th>
+          <th>Fecha</th>
+          <th>Canal</th>
+          <th>Registrado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in orders %}
+        <tr>
+          <td class="text-muted">{{ o['id'] }}</td>
+          <td><code>{{ o['order_id'] }}</code></td>
+          <td>{{ o['customer_id'] }}</td>
+          <td>{{ o['sku'] }}</td>
+          <td class="text-end">{{ o['quantity'] }}</td>
+          <td class="text-end">${{ "%.2f" | format(o['unit_price']) }}</td>
+          <td class="text-end fw-semibold">${{ "%.2f" | format(o['quantity'] * o['unit_price']) }}</td>
+          <td>{{ o['order_date'] }}</td>
+          <td>
+            <span class="badge bg-secondary badge-ch">{{ o['channel'] }}</span>
+          </td>
+          <td class="text-muted small">{{ o['created_at'].strftime('%Y-%m-%d %H:%M') if o['created_at'] else '' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-info">Aún no hay pedidos registrados.</div>
+  {% endif %}
+</div>
+</body>
+</html>
