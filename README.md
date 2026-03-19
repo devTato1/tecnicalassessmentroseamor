@@ -137,11 +137,8 @@ Margin %      = DIVIDE(SUM(v_orders_full[gross_profit]), [Total Sales])
 
 ### Evidencia Visual
 
-> En un entorno de producción real se incluirían capturas de pantalla de alta resolución de las siguientes secciones:
-
 - **Dashboard Ejecutivo:** Resumen de ingresos, márgenes y tendencias de pedidos.
-- **Análisis de Mercado:** Distribución de ventas por Canal y Categoría.
-- **Insights de Clientes:** Top 10 de generadores de ingresos y rendimiento de productos.
+<img width="1046" height="623" alt="image" src="https://github.com/user-attachments/assets/b1d071a0-0f90-471e-bebd-9d933c188304" />
 
 ---
 
@@ -156,6 +153,9 @@ Desarrollada con **Python Flask**, la aplicación sirve como puerta de entrada p
 - Restricciones numéricas positivas para cantidad y precio.
 - Validación estricta de Enums para canales de venta (`ecommerce`, `retail`, `wholesale`, `export`).
 - Integridad relacional mantenida mediante restricciones de unicidad en `order_id`.
+
+<img width="1915" height="1020" alt="image" src="https://github.com/user-attachments/assets/964b8d86-cbba-488e-b31c-f0ad9d1f290d" />
+
 
 ---
 
