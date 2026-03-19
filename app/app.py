@@ -150,9 +150,51 @@ def create_order():
     if errors:
         return render_template("index.html", errors=errors, form_data=form_data), 422
 
+    quantity = int(form_data["quantity"])
+    unit_price = float(form_data["unit_price"])
+    order_date_obj = datetime.strptime(form_data["order_date"], "%Y-%m-%d").date()
+
     try:
         conn = get_db()
-        cur  = conn.cursor()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        cur.execute(
+            """
+            SELECT customer_id
+            FROM dim_customers
+            WHERE customer_id = %s
+            """,
+            (form_data["customer_id"],),
+        )
+        customer = cur.fetchone()
+        if not customer:
+            errors["customer_id"] = (
+                f"El customer_id '{form_data['customer_id']}' no existe en dim_customers."
+            )
+            cur.close()
+            conn.close()
+            return render_template("index.html", errors=errors, form_data=form_data), 422
+
+        cur.execute(
+            """
+            SELECT sku, cost
+            FROM dim_products
+            WHERE sku = %s
+            """,
+            (form_data["sku"],),
+        )
+        product = cur.fetchone()
+        if not product:
+            errors["sku"] = f"El SKU '{form_data['sku']}' no existe en dim_products."
+            cur.close()
+            conn.close()
+            return render_template("index.html", errors=errors, form_data=form_data), 422
+
+        product_cost = float(product["cost"]) if product["cost"] is not None else 0.0
+        revenue = round(quantity * unit_price, 2)
+        gross_profit = round(quantity * (unit_price - product_cost), 2)
+        margin_pct = round(((unit_price - product_cost) / unit_price) * 100, 2) if unit_price > 0 else None
+
         cur.execute(
             """
             INSERT INTO new_orders
@@ -163,19 +205,58 @@ def create_order():
                 form_data["order_id"],
                 form_data["customer_id"],
                 form_data["sku"],
-                int(form_data["quantity"]),
-                float(form_data["unit_price"]),
-                form_data["order_date"],
+                quantity,
+                unit_price,
+                order_date_obj,
                 form_data["channel"],
             ),
         )
+
+        cur.execute(
+            """
+            INSERT INTO fact_orders (
+                order_id,
+                customer_id,
+                sku,
+                quantity,
+                unit_price,
+                order_date,
+                year,
+                month,
+                year_month,
+                channel,
+                revenue,
+                gross_profit,
+                margin_pct
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                form_data["order_id"],
+                form_data["customer_id"],
+                form_data["sku"],
+                quantity,
+                unit_price,
+                order_date_obj,
+                order_date_obj.strftime("%Y"),
+                order_date_obj.strftime("%m"),
+                order_date_obj.strftime("%Y-%m"),
+                form_data["channel"],
+                revenue,
+                gross_profit,
+                margin_pct,
+            ),
+        )
+
         conn.commit()
         cur.close()
         conn.close()
     except psycopg2.IntegrityError:
         conn.rollback()
         conn.close()
-        errors["order_id"] = f"El Order ID '{form_data['order_id']}' ya existe en la base de datos."
+        errors["order_id"] = (
+            f"El Order ID '{form_data['order_id']}' ya existe en new_orders o fact_orders."
+        )
         return render_template("index.html", errors=errors, form_data=form_data), 409
 
     return render_template("index.html", errors={}, form_data={}, success=True)

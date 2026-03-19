@@ -67,6 +67,44 @@ def normalize_date(value: str) -> str | None:
     return date_part
 
 
+def fetch_new_orders(cur):
+    """
+    Read app orders from public.new_orders.
+    If table does not exist, return an empty list to avoid ETL failures.
+    """
+    cur.execute("SELECT to_regclass('public.new_orders')")
+    if cur.fetchone()[0] is None:
+        return []
+
+    cur.execute(
+        """
+        SELECT
+            order_id,
+            customer_id,
+            sku,
+            quantity,
+            unit_price,
+            order_date,
+            channel
+        FROM new_orders
+        """
+    )
+    rows = cur.fetchall()
+
+    normalized = []
+    for r in rows:
+        normalized.append({
+            "order_id": (r[0] or "").strip(),
+            "customer_id": (r[1] or "").strip(),
+            "sku": (r[2] or "").strip(),
+            "quantity": r[3],
+            "unit_price": r[4],
+            "order_date": str(r[5]) if r[5] is not None else "",
+            "channel": (r[6] or "").strip().lower(),
+        })
+    return normalized
+
+
 # STAGING
 
 def load_staging(cur):
@@ -112,31 +150,56 @@ def load_staging(cur):
     # ---------- orders ----------
     seen_order_ids: set = set()
     order_rows = []
+
+    # First app orders, then CSV orders. If an order_id repeats,
+    # app order is kept as valid and CSV duplicate is flagged.
+    app_orders = fetch_new_orders(cur)
+
+    csv_orders = []
     with open(DATA / "orders.csv", encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            oid      = row["order_id"].strip()
-            qty      = safe_int(row["quantity"])
-            price    = safe_float(row["unit_price"])
-            date     = normalize_date(row["order_date"])
-            channel  = row["channel"].strip().lower()
+            csv_orders.append({
+                "order_id": row["order_id"].strip(),
+                "customer_id": row["customer_id"].strip(),
+                "sku": row["sku"].strip(),
+                "quantity": row["quantity"],
+                "unit_price": row["unit_price"],
+                "order_date": row["order_date"],
+                "channel": row["channel"].strip().lower(),
+            })
 
-            is_dup   = 1 if oid in seen_order_ids else 0
-            neg_qty  = 1 if (qty is not None and qty < 0) else 0
-            null_prc = 1 if price is None else 0
-            bad_date = 1 if date is None else 0
+    for row in app_orders + csv_orders:
+        oid = row["order_id"]
+        qty = safe_int(str(row["quantity"]))
+        price = safe_float(str(row["unit_price"]))
+        date = normalize_date(str(row["order_date"]))
+        channel = row["channel"]
 
-            seen_order_ids.add(oid)
-            order_rows.append((
-                oid, row["customer_id"].strip(), row["sku"].strip(),
-                qty, price, date, channel,
-                is_dup, neg_qty, null_prc, bad_date
-            ))
+        is_dup = 1 if oid in seen_order_ids else 0
+        neg_qty = 1 if (qty is not None and qty < 0) else 0
+        null_prc = 1 if price is None else 0
+        bad_date = 1 if date is None else 0
+
+        seen_order_ids.add(oid)
+        order_rows.append((
+            oid,
+            row["customer_id"],
+            row["sku"],
+            qty,
+            price,
+            date,
+            channel,
+            is_dup,
+            neg_qty,
+            null_prc,
+            bad_date
+        ))
 
     cur.executemany(
         "INSERT INTO stg_orders VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         order_rows
     )
-    print(f"   stg_orders   : {len(order_rows):>6} rows loaded")
+    print(f"   stg_orders   : {len(order_rows):>6} rows loaded (csv + app)")
 
     # ---------- customers ----------
     customer_rows = []
